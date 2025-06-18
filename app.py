@@ -1,10 +1,13 @@
 import RPi.GPIO as GPIO
 import os
+from dotenv import load_dotenv
 import sys
 import time
 import json
 import threading
 from websocket import WebSocketApp
+
+load_dotenv()
 
 # ─── Configuration ─────────────────────────────────────────────────────────────
 
