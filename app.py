@@ -40,6 +40,21 @@ def setup_gpio():
 def cleanup_gpio():
     GPIO.cleanup()
 
+# ─── Pulse Callback ────────────────────────────────────────────────────────────
+
+def coin_interrupt(PIN):
+    """Called on every edge; we only care when it goes to PULSE_VAL."""
+    global prev_val, total_amount
+    gpio_val = GPIO.input(PIN)
+    # detect the falling (or rising) edge to PULSE_VAL once
+    if gpio_val == PULSE_VAL and prev_val != PULSE_VAL:
+        total_amount += 1
+        print(f"Pulse! total_amount={total_amount}")
+        sys.stdout.flush()
+        # fire off WS update
+        send_coin_update(total_amount)
+    prev_val = gpio_val
+
 # ─── WebSocket Helpers ────────────────────────────────────────────────────────
 
 def on_ws_open(ws):
@@ -91,21 +106,6 @@ def send_coin_update(count: int):
                 print("Failed to send WS message:", e)
         else:
             print("WS not connected, could not send:", payload)
-
-# ─── Pulse Callback ────────────────────────────────────────────────────────────
-
-def coin_interrupt(pin):
-    """Called on every edge; we only care when it goes to PULSE_VAL."""
-    global prev_val, total_amount
-    gpio_val = GPIO.input(pin)
-    # detect the falling (or rising) edge to PULSE_VAL once
-    if gpio_val == PULSE_VAL and prev_val != PULSE_VAL:
-        total_amount += 1
-        print(f"Pulse! total_amount={total_amount}")
-        sys.stdout.flush()
-        # fire off WS update
-        send_coin_update(total_amount)
-    prev_val = gpio_val
 
 # ─── Main Loop ─────────────────────────────────────────────────────────────────
 
