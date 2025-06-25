@@ -6,6 +6,7 @@ import time
 import json
 import threading
 from websocket import WebSocketApp
+import ssl
 
 load_dotenv()
 
@@ -85,7 +86,14 @@ def start_ws():
         on_close=on_ws_close,
     )
     # run_forever will block, so spin it off into its own thread
-    wst = threading.Thread(target=lambda: ws_app.run_forever(ping_interval=30, ping_timeout=10))
+    ssl_opts = {"cert_reqs": ssl.CERT_NONE}
+    wst = threading.Thread(
+        target=lambda: ws_app.run_forever(
+            sslopt=ssl_opts,
+            ping_interval=30,
+            ping_timeout=10,
+        )
+    )
     wst.daemon = True
     wst.start()
 
