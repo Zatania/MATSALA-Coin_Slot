@@ -64,13 +64,23 @@ def on_ws_open(ws):
     # ws.send(json.dumps({"type": "hello", "source": "raspi_coin_reader"}))
 
 def on_ws_message(ws, message):
-    msg = json.loads(message)
-    if msg.get("event") == "reset_coins":
+    # Handle incoming control messages:
+    try:
+        msg = json.loads(message)
+    except ValueError:
+        print("WS: invalid JSON:", message)
+        return
+
+    ev = msg.get("event")
+    if ev == "reset":
         global total_amount
         total_amount = 0
-        print("Reset total_amount to 0")
+        print("WS: reset total_amount to 0")
+        sys.stdout.flush()
     else:
-        print("WebSocket: received:", message)
+        # any other messages
+        print("WebSocket: received:", msg)
+        sys.stdout.flush()
 
 def on_ws_error(ws, error):
     print("WebSocket: error:", error)
