@@ -11,18 +11,25 @@ import ssl
 load_dotenv()
 
 # ─── Configuration ─────────────────────────────────────────────────────────────
-PIN        = 2      # BCM pin connected to coin acceptor
-PULSE_VAL  = 0      # level that indicates a pulse
-BOUNCE_MS  = 36     # debounce time
 
-WS_URL     = os.environ['COIN_READER_WS_URL']
+# GPIO / pulse settings
+PIN = 2                # BCM pin connected to coin acceptor
+PULSE_VAL = 0          # level that indicates a pulse
+BOUNCE_MS = 36         # debounce time
+READ_INTERVAL = 1      # only used for type‑2 polling (you’re using add_event_detect here)
+
+# WebSocket settings
+WS_URL = os.environ['COIN_READER_WS_URL'] 
 
 # ─── Globals ──────────────────────────────────────────────────────────────────
-prev_val   = None
+
+prev_val = None
+total_amount = 0
 ws_app: WebSocketApp = None
-ws_lock    = threading.Lock()
+ws_lock = threading.Lock()
 
 # ─── GPIO Setup / Teardown ────────────────────────────────────────────────────
+
 def setup_gpio():
     global prev_val
     GPIO.setwarnings(False)
@@ -35,31 +42,41 @@ def cleanup_gpio():
     GPIO.cleanup()
 
 # ─── Pulse Callback ────────────────────────────────────────────────────────────
-def coin_interrupt(pin):
+
+def coin_interrupt(PIN):
     """Called on every edge; we only care when it goes to PULSE_VAL."""
-    global prev_val
-    val = GPIO.input(pin)
-    if val == PULSE_VAL and prev_val != PULSE_VAL:
-        print("Pulse! sending delta=1")
+    global prev_val, total_amount
+    gpio_val = GPIO.input(PIN)
+    # detect the falling (or rising) edge to PULSE_VAL once
+    if gpio_val == PULSE_VAL and prev_val != PULSE_VAL:
+        total_amount = 1
+        print(f"Pulse! total_amount={total_amount}")
         sys.stdout.flush()
-        send_coin_update(1)
-    prev_val = val
+        # fire off WS update
+        send_coin_update(total_amount)
+    prev_val = gpio_val
 
 # ─── WebSocket Helpers ────────────────────────────────────────────────────────
+
 def on_ws_open(ws):
     print("WebSocket: connection opened")
+    # Optionally send an initial handshake message:
+    # ws.send(json.dumps({"type": "hello", "source": "raspi_coin_reader"}))
 
 def on_ws_message(ws, message):
+    # If your backend ever pushes messages (unlikely here), handle them:
     print("WebSocket: received:", message)
 
 def on_ws_error(ws, error):
     print("WebSocket: error:", error)
 
-def on_ws_close(ws, code, msg):
-    print(f"WebSocket: closed ({code}) {msg}")
+def on_ws_close(ws, close_status_code, close_msg):
+    print(f"WebSocket: closed ({close_status_code}) {close_msg}")
+    # websocket-client will automatically try to reconnect if you set
+    # `run_forever(reconnect=True)`
 
 def start_ws():
-    """Initialize WS and run it in its own thread."""
+    """Initialize the WebSocketApp and run it forever in a background thread."""
     global ws_app
     ws_app = WebSocketApp(
         WS_URL,
@@ -68,24 +85,25 @@ def start_ws():
         on_error=on_ws_error,
         on_close=on_ws_close,
     )
+    # run_forever will block, so spin it off into its own thread
     ssl_opts = {"cert_reqs": ssl.CERT_NONE}
-    t = threading.Thread(
+    wst = threading.Thread(
         target=lambda: ws_app.run_forever(
             sslopt=ssl_opts,
             ping_interval=30,
             ping_timeout=10,
         )
     )
-    t.daemon = True
-    t.start()
+    wst.daemon = True
+    wst.start()
 
-def send_coin_update(delta: int):
-    """Send only the number of coins just inserted (delta)."""
+def send_coin_update(count: int):
+    """Safely send the updated total_amount to the WS server."""
     global ws_app
     payload = {
-        "event":      "coin_inserted",
-        "delta":      delta,
-        "timestamp":  int(time.time())
+        "event": "coin_inserted",
+        "coin_count": count,
+        "timestamp": int(time.time())
     }
     with ws_lock:
         if ws_app and ws_app.sock and ws_app.sock.connected:
@@ -97,18 +115,22 @@ def send_coin_update(delta: int):
         else:
             print("WS not connected, could not send:", payload)
 
-# ─── Main ──────────────────────────────────────────────────────────────────────
+# ─── Main Loop ─────────────────────────────────────────────────────────────────
+
 def main():
     print("Starting coin reader & WebSocket client…")
     setup_gpio()
     start_ws()
+
     try:
+        # we don't need to do anything in the loop, interrupts + WS thread handle it
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
         print("Shutting down…")
     finally:
         cleanup_gpio()
+        # also close WS cleanly
         if ws_app:
             ws_app.close()
 
