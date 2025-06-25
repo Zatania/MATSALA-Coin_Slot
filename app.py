@@ -12,7 +12,7 @@ load_dotenv()
 # ─── Configuration ─────────────────────────────────────────────────────────────
 
 # GPIO / pulse settings
-PIN = 25                # BCM pin connected to coin acceptor
+PIN = 2                # BCM pin connected to coin acceptor
 PULSE_VAL = 0          # level that indicates a pulse
 BOUNCE_MS = 36         # debounce time
 READ_INTERVAL = 1      # only used for type‑2 polling (you’re using add_event_detect here)
