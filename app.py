@@ -49,7 +49,7 @@ def coin_interrupt(PIN):
     gpio_val = GPIO.input(PIN)
     # detect the falling (or rising) edge to PULSE_VAL once
     if gpio_val == PULSE_VAL and prev_val != PULSE_VAL:
-        total_amount = 1
+        total_amount += 1
         print(f"Pulse! total_amount={total_amount}")
         sys.stdout.flush()
         # fire off WS update
